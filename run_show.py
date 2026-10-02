@@ -6,6 +6,8 @@ from pathlib import Path
 
 from lights.effects.colour import load_colours, load_palettes
 from lights.rig import Rig
+from lights.show.console import ConsoleCommand, ShowConsole, print_help
+from lights.show.controller import ShowController
 from lights.show.engine import ShowEngine
 from lights.show.loader import load_show
 
@@ -29,32 +31,110 @@ def resolve_show_path(path: str) -> Path:
     return ROOT / show_path
 
 
-# Black out every fixture used by the show
-def blackout(rig: Rig, show: dict) -> None:
-    for fixture_name in show["fixtures"]:
-        fixture = rig.get_fixture(fixture_name)
+# Format elapsed seconds for console output
+def format_time(seconds: float) -> str:
+    total_seconds = int(seconds)
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
 
-        fixture.set_many(
-            master_dimmer=0,
-            strobe=0,
-            red=0,
-            green=0,
-            blue=0,
-            white=0,
-        )
-
-    rig.send()
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
-# Run the show using monotonic elapsed time
-def run_show(engine: ShowEngine) -> None:
-    start_time = time.monotonic()
+# Print the current show state
+def print_status(controller: ShowController) -> None:
+    status = controller.status()
+
+    print(f"Elapsed       : {format_time(status.elapsed)}")
+    print(f"Phase         : {status.phase_name}")
+    print(f"Phase elapsed : {format_time(status.phase_elapsed)}")
+    print(f"Paused        : {status.paused}")
+    print(f"Blackout      : {status.blackout}")
+
+    for layer_name, effect_name in status.effects.items():
+        print(f"{layer_name.capitalize():<14}: {effect_name}")
+
+
+# Handle one interactive console command
+def handle_command(controller: ShowController, command: ConsoleCommand) -> None:
+    if command.name == "status":
+        print_status(controller)
+        return
+
+    if command.name == "next":
+        phase_name = controller.next_phase()
+
+        if phase_name is None:
+            print("Already in final phase")
+        else:
+            print(f"Phase: {phase_name}")
+
+        return
+
+    if command.name == "phase":
+        phase_name = command.args[0]
+        controller.set_phase(phase_name)
+        print(f"Phase: {phase_name}")
+        return
+
+    if command.name == "pause":
+        controller.pause()
+        print("Paused")
+        return
+
+    if command.name == "resume":
+        controller.resume()
+        print("Resumed")
+        return
+
+    if command.name == "blackout":
+        controller.blackout()
+        print("Blackout")
+        return
+
+    if command.name == "restore":
+        controller.restore()
+        print("Restored")
+        return
+
+    if command.name == "reload":
+        controller.reload()
+        print("Show reloaded")
+        return
+
+    if command.name == "help":
+        print_help()
+        return
+
+    if command.name == "quit":
+        controller.stop()
+
+
+# Process every command currently waiting in the console queue
+def process_commands(controller: ShowController, console: ShowConsole) -> None:
+    while True:
+        command = console.get_command()
+
+        if command is None:
+            return
+
+        try:
+            handle_command(controller, command)
+        except Exception as exc:
+            print(f"Command failed: {exc}")
+
+
+# Run the interactive show loop
+def run_show(controller: ShowController, console: ShowConsole) -> None:
     frame_interval = 1.0 / UPDATE_HZ
     last_phase = None
 
-    while True:
-        elapsed = time.monotonic() - start_time
-        state = engine.update(elapsed)
+    while controller.running:
+        process_commands(controller, console)
+
+        if not controller.running:
+            break
+
+        state = controller.update()
 
         if state.phase_name != last_phase:
             print(f"Phase: {state.phase_name}")
@@ -71,20 +151,23 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-# Load configuration and run the lighting show
+# Load the rig and start the interactive show
 def main() -> None:
     args = parse_args()
-
     show_path = resolve_show_path(args.show)
 
     show = load_show(show_path)
     colours = load_colours(COLOURS_PATH)
     palettes = load_palettes(PALETTES_PATH, colours)
 
-    print(f"Show    : {show_path.name}")
-    print(f"Fixtures: {', '.join(show['fixtures'])}")
-    print(f"Seed    : {show['seed']}")
+    print(f"Show     : {show_path.name}")
+    print(f"Fixtures : {', '.join(show['fixtures'])}")
+    print(f"Seed     : {show['seed']}")
+    print("Type 'help' for commands")
     print("Press Ctrl+C to stop")
+    print()
+
+    console = ShowConsole()
 
     with Rig(RIG_PATH) as rig:
         engine = ShowEngine(
@@ -94,12 +177,20 @@ def main() -> None:
             palettes=palettes,
         )
 
+        controller = ShowController(
+            engine=engine,
+            show_path=show_path,
+        )
+
+        console.start()
+
         try:
-            run_show(engine)
+            run_show(controller, console)
         except KeyboardInterrupt:
             print("\nStopping show")
         finally:
-            blackout(rig, show)
+            console.stop()
+            controller.stop()
 
 
 if __name__ == "__main__":
