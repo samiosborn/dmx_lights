@@ -1,0 +1,17 @@
+# config/rig.yaml
+
+# Art-Net nodes
+nodes:
+  easynode:
+    transport: artnet
+    target_ip: 192.168.1.248
+    universe: 0
+    port: 6454
+
+
+# Physical fixtures
+fixtures:
+  zq06141_1:
+    type: zq06141_11ch
+    node: easynode
+    start_address: 1

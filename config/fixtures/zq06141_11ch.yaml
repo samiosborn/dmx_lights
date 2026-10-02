@@ -1,0 +1,126 @@
+# config/fixtures/zq06141_11ch.yaml
+
+# Fixture identity
+fixture:
+  id: zq06141_11ch
+  name: ZQ06141 12-Beam RGBW Swing Wall Washer
+  mode: 11CH
+  channel_count: 11
+
+
+# Named motor positions
+positions:
+  left: 0
+  centre_left: 64
+  centre: 128
+  centre_right: 192
+  right: 255
+
+
+# Safe/default fixture state
+defaults:
+  position: centre
+  motor_speed: 128
+
+  master_dimmer: 255
+  strobe: 0
+
+  red: 0
+  green: 0
+  blue: 0
+  white: 0
+
+  builtin_effect: 0
+  sound_reactive: false
+
+  unknown_channel: 0
+
+
+# DMX channel mapping
+channels:
+
+  # Motor position
+  position:
+    channel: 1
+    type: continuous
+    range: [0, 255]
+    notes:
+      - "0 = left"
+      - "128 ~= centre"
+      - "255 = right"
+
+  # Motor movement speed
+  motor_speed:
+    channel: 2
+    type: continuous
+    range: [0, 255]
+    default: 128
+    notes:
+      - "0 = fastest"
+
+  # Master brightness
+  master_dimmer:
+    channel: 3
+    type: continuous
+    range: [0, 255]
+
+  # Fixture strobe
+  strobe:
+    channel: 4
+    type: continuous
+    range: [0, 255]
+    notes:
+      - "0 = no strobe"
+
+  # RGBW colour channels
+  red:
+    channel: 5
+    type: continuous
+    range: [0, 255]
+
+  green:
+    channel: 6
+    type: continuous
+    range: [0, 255]
+
+  blue:
+    channel: 7
+    type: continuous
+    range: [0, 255]
+
+  white:
+    channel: 8
+    type: continuous
+    range: [0, 255]
+
+  # Built-in fixture effects
+  builtin_effect:
+    channel: 9
+    type: continuous
+    range: [0, 255]
+    known_values:
+      0: "off"
+      60: "colour sequence moving from left to right"
+      128: "3 white, 3 blue, 3 green, 3 red"
+      255: "LEDs 1 and 7 red; remaining LEDs white"
+    notes:
+      - "Exact effect ranges are not fully mapped yet."
+
+  # Built-in sound reaction
+  sound_reactive:
+    channel: 10
+    type: boolean
+    values:
+      false: 0
+      true: 255
+    notes:
+      - "Controls the fixture's built-in sound-reactive behaviour."
+      - "Kept independent from CH9 until their interaction is better understood."
+
+  # Unmapped channel
+  unknown_channel:
+    channel: 11
+    type: continuous
+    range: [0, 255]
+    notes:
+      - "Function not yet established."
