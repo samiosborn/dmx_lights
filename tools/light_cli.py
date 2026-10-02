@@ -1,101 +1,79 @@
+# tools/light_cli.py
+
 import argparse
-import json
-import socket
-import struct
 import threading
 import time
 from pathlib import Path
 
+from lights.fixtures.fixture import Fixture, load_fixture_config
+from lights.rig import Rig
 
-ARTNET_PORT_DEFAULT = 6454
+
+# Physical rig configuration
+CONFIG = Path(__file__).resolve().parents[1] / "config/rig.yaml"
 
 
+# Load and validate the YAML fixture definition
 def load_config(path: Path) -> dict:
-    with path.open("r", encoding="utf-8") as f:
-        return json.load(f)
+    return load_fixture_config(path)
 
 
-def get_local_ip(target: str, port: int) -> str:
-    """Ask Windows which local interface/IP it would use to reach the EasyNode."""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        sock.connect((target, port))
-        return sock.getsockname()[0]
-    finally:
-        sock.close()
-
-
-def build_artdmx(dmx: bytearray, universe: int, sequence: int) -> bytes:
-    if not 0 <= universe <= 32767:
-        raise ValueError("Universe must be 0..32767")
-
-    subuni = universe & 0xFF
-    net = (universe >> 8) & 0x7F
-
-    return (
-        b"Art-Net\x00"
-        + struct.pack("<H", 0x5000)
-        + struct.pack(">H", 14)
-        + bytes([sequence, 0])
-        + bytes([subuni, net])
-        + struct.pack(">H", len(dmx))
-        + bytes(dmx)
-    )
-
-
+# Manage configured controls and continuous Art-Net output
 class LightController:
-    def __init__(self, config: dict):
-        self.config = config
+    # Initialize configured controls and the sender thread
+    def __init__(self, rig: Rig, fixture_name: str, config: dict | None = None):
+        self.rig = rig
+        self.fixture = rig.get_fixture(fixture_name)
+        self.config = config if config is not None else self.fixture.config
+        config = self.config
+        self.start_address = self.fixture.start_address
+        self.transport = rig.transports[rig.fixture_nodes[fixture_name]]
 
-        artnet = config["fixture"]["artnet"]
-        self.target = artnet["target_ip"]
-        self.port = int(artnet.get("port", ARTNET_PORT_DEFAULT))
-        self.universe = int(artnet.get("universe", 0))
-        self.hz = float(artnet.get("refresh_hz", 40))
+        self.target = self.transport.target_ip
+        self.port = self.transport.port
+        self.universe = self.transport.universe
+        self.hz = 40.0
 
-        self.dmx = bytearray(512)
+        # Render the semantic defaults into the initial DMX state
+        self.dmx = rig.render_node(rig.fixture_nodes[fixture_name])
+        if config is not self.fixture.config:
+            self._apply_fixture_frame(Fixture(config, start_address=self.start_address).render())
         self.lock = threading.Lock()
         self.running = True
-        self.sequence = 1
 
         self.channels_by_number = {
-            int(number): data
-            for number, data in config["channels"].items()
+            self.start_address + int(data["channel"]) - 1: {**data, "name": name}
+            for name, data in config["channels"].items()
         }
-
         self.channel_by_name = {
-            data["name"].lower(): number
-            for number, data in self.channels_by_number.items()
-            if data.get("name") and data["name"] != "unknown"
+            name.lower(): self.start_address + int(data["channel"]) - 1
+            for name, data in config["channels"].items()
         }
 
-        self.local_ip = get_local_ip(self.target, self.port)
-
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind((self.local_ip, 0))
+        self.local_ip = self.transport.local_ip
 
         self.thread = threading.Thread(target=self._sender, daemon=True)
         self.thread.start()
 
+    # Replace only the selected fixture's channels in the node frame
+    def _apply_fixture_frame(self, frame):
+        start = self.start_address - 1
+        end = start + int(self.config["fixture"]["channel_count"])
+        self.dmx[start:end] = frame[start:end]
+
+    # Transmit DMX state at the configured rate
     def _sender(self):
         delay = 1.0 / self.hz
 
         while self.running:
             with self.lock:
-                packet = build_artdmx(
-                    self.dmx,
-                    universe=self.universe,
-                    sequence=self.sequence,
-                )
+                frame = bytes(self.dmx)
 
-            self.sock.sendto(packet, (self.target, self.port))
-
-            self.sequence += 1
-            if self.sequence > 255:
-                self.sequence = 1
+            self.transport.send(frame)
 
             time.sleep(delay)
 
+    # Validate and update a raw channel
     def set_channel(self, channel: int, value: int):
         if not 1 <= channel <= 512:
             raise ValueError("Channel must be 1..512")
@@ -105,6 +83,7 @@ class LightController:
         with self.lock:
             self.dmx[channel - 1] = value
 
+    # Resolve channel numbers, configured names, or unique prefixes
     def resolve_control(self, control: str) -> int:
         control = control.lower()
 
@@ -132,46 +111,45 @@ class LightController:
 
         raise ValueError(f"Unknown control: {control}")
 
+    # Parse values using the configured channel type
     def parse_value_for_channel(self, channel: int, raw_value: str) -> int:
-        data = self.channels_by_number.get(channel, {})
-        channel_type = data.get("type", "continuous")
+        data = self.channels_by_number.get(channel)
+        if data is None:
+            value = int(raw_value)
+            if not 0 <= value <= 255:
+                raise ValueError("Value must be 0..255")
+            return value
 
-        if channel_type == "boolean":
-            values = data.get("values", {"off": 0, "on": 255})
-            token = raw_value.lower()
+        token = raw_value.lower()
+        if data["type"] == "boolean":
+            if token in {"on", "true", "yes", "1"}:
+                value = True
+            elif token in {"off", "false", "no", "0"}:
+                value = False
+            else:
+                raise ValueError(f"{data['name']} is boolean; use on/off")
+        elif data["name"] == "position" and token in self.config.get("positions", {}):
+            value = token
+        else:
+            value = int(raw_value)
 
-            if token in values:
-                return int(values[token])
+        # Delegate semantic validation and DMX encoding to the shared fixture
+        fixture = Fixture(self.config, start_address=self.start_address)
+        fixture.set(data["name"], value)
+        return fixture.render()[channel - 1]
 
-            if token in {"true", "yes", "1"}:
-                return int(values["on"])
-
-            if token in {"false", "no", "0"}:
-                return int(values["off"])
-
-            raise ValueError(
-                f"{data.get('name', f'CH{channel}')} is boolean; use on/off"
-            )
-
-        value = int(raw_value)
-        if not 0 <= value <= 255:
-            raise ValueError("Value must be 0..255")
-        return value
-
+    # Set a control through its configured name
     def set_named(self, control: str, raw_value: str):
         channel = self.resolve_control(control)
         value = self.parse_value_for_channel(channel, raw_value)
         self.set_channel(channel, value)
         return channel, value
 
+    # Toggle sound-reactive effects using configured values
     def set_sound(self, enabled: bool):
-        channel = self.resolve_control("sound_reactive")
-        data = self.channels_by_number[channel]
-        values = data.get("values", {"off": 0, "on": 255})
-        value = int(values["on" if enabled else "off"])
-        self.set_channel(channel, value)
-        return channel, value
+        return self.set_named("sound_reactive", "on" if enabled else "off")
 
+    # Replace DMX state with a configured preset
     def apply_preset(self, name: str):
         presets = self.config.get("presets", {})
 
@@ -181,11 +159,13 @@ class LightController:
                 f"Available: {', '.join(sorted(presets))}"
             )
 
+        # Presets use semantic control names from the YAML definition
+        fixture = Fixture(self.config, start_address=self.start_address)
+        fixture.set_many(**presets[name])
         with self.lock:
-            self.dmx[:] = bytes(512)
-            for channel, value in presets[name].items():
-                self.dmx[int(channel) - 1] = int(value)
+            self._apply_fixture_frame(fixture.render())
 
+    # Turn off the master dimmer
     def blackout(self):
         dimmer_channel = self.channel_by_name.get("master_dimmer")
         if dimmer_channel is None:
@@ -193,20 +173,23 @@ class LightController:
 
         self.set_channel(dimmer_channel, 0)
 
+    # Clear every DMX channel
     def zero(self):
         with self.lock:
             self.dmx[:] = bytes(512)
 
+    # Display boolean values as on/off
     def format_value(self, channel: int, value: int) -> str:
         data = self.channels_by_number.get(channel, {})
         if data.get("type") == "boolean":
             values = data.get("values", {})
-            if value == values.get("on", 255):
+            if value == values.get(True, values.get("true", 255)):
                 return "on"
-            if value == values.get("off", 0):
+            if value == values.get(False, values.get("false", 0)):
                 return "off"
         return str(value)
 
+    # Show the current values of configured channels
     def status(self):
         rows = []
         with self.lock:
@@ -217,30 +200,28 @@ class LightController:
                     (
                         channel,
                         data.get("name", "unknown"),
-                        data.get("status", ""),
                         self.format_value(channel, value),
                     )
                 )
 
-        width = max(len(name) for _, name, _, _ in rows)
+        width = max(len(name) for _, name, _ in rows)
 
-        for channel, name, status, value in rows:
+        for channel, name, value in rows:
             print(
                 f"CH{channel:>2}  "
                 f"{name:<{width}}  "
-                f"{value:>5}  "
-                f"[{status}]"
+                f"{value:>5}"
             )
 
+    # Describe configured controls and observations
     def list_controls(self):
         for channel in sorted(self.channels_by_number):
             data = self.channels_by_number[channel]
             name = data.get("name", "unknown")
-            status = data.get("status", "")
             channel_type = data.get("type", "continuous")
-            notes = data.get("notes", "")
+            notes = data.get("notes", [])
 
-            print(f"CH{channel:>2}  {name:<22} [{status}] ({channel_type})")
+            print(f"CH{channel:>2}  {name:<22} ({channel_type})")
 
             if channel_type == "boolean":
                 values = data.get("values", {})
@@ -250,24 +231,29 @@ class LightController:
                         + ", ".join(f"{k}={v}" for k, v in values.items())
                     )
 
-            if notes:
-                print(f"      {notes}")
+            for note in notes:
+                print(f"      {note}")
 
-            observations = data.get("observations", {})
+            observations = data.get("known_values", {})
             for value, observation in observations.items():
                 print(f"      {value:>3}: {observation}")
 
+    # List available presets
     def list_presets(self):
         presets = self.config.get("presets", {})
+        if not presets:
+            print("No presets configured")
         for name in sorted(presets):
             print(name)
 
+    # Stop transmission and close the transport
     def close(self):
         self.running = False
         self.thread.join(timeout=1)
-        self.sock.close()
+        self.rig.close()
 
 
+# Interactive command reference
 HELP = """
 Commands
 
@@ -276,11 +262,11 @@ Commands
 
   sound on|off           Toggle sound-reactive mode for CH9 effects
 
-  preset NAME            Apply a preset from the JSON config
+  preset NAME            Apply a preset from the YAML config
   presets                List presets
 
   status                 Show current values for configured channels
-  controls               Show channel names, confidence and observations
+  controls               Show channel names, types and notes
 
   blackout               Set master dimmer to 0, keep other state
   zero                   Set all 512 channels to 0
@@ -290,11 +276,13 @@ Commands
 
 Examples
 
+  set position centre
   set position 128
+  set motor_speed 128
   set master_dimmer 255
   set red 255
   set strobe 0
-  set effect_selector 60
+  set builtin_effect 60
 
   set sound_reactive on
   sound on
@@ -302,51 +290,59 @@ Examples
 
   raw 9 128
 
-  preset solid_red
-  preset solid_blue
+  presets
 
 Notes
 
-  - Channel mapping is loaded from zq06141_11ch.json.
+  - Fixture and channel mapping are selected through config/rig.yaml.
   - CH10 is treated as a boolean sound-reactive switch:
       off = 0
       on  = 255
-  - dmx_cli.py remains the low-level tool for discovering raw channel behaviour.
+  - Use uv run python -m tools.dmx_cli for low-level raw channel debugging.
 """
 
 
-def main():
+# Start the controller and process interactive commands
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Named CLI controller for the ZQ06141 via Art-Net."
     )
     parser.add_argument(
         "--config",
         type=Path,
-        default=Path(__file__).with_name("zq06141_11ch.json"),
-        help="Path to fixture JSON config",
+        help="Override the selected fixture YAML definition",
     )
+    parser.add_argument("--rig", type=Path, default=CONFIG, help="Path to physical rig YAML config")
+    parser.add_argument("--fixture", help="Fixture instance name (required when the rig has multiple fixtures)")
     args = parser.parse_args()
 
+    rig = None
     try:
-        config = load_config(args.config)
-    except FileNotFoundError:
-        print(f"Config not found: {args.config}")
-        print("Put zq06141_11ch.json beside this script or use --config PATH")
-        return
-
-    try:
-        controller = LightController(config)
-    except OSError as exc:
+        config = load_config(args.config) if args.config else None
+        rig = Rig(args.rig)
+        fixture_name = args.fixture
+        if fixture_name is None:
+            if len(rig.fixtures) != 1:
+                raise ValueError("Specify --fixture when the rig does not contain exactly one fixture")
+            fixture_name = next(iter(rig.fixtures))
+        controller = LightController(rig, fixture_name, config)
+    except (OSError, ValueError) as exc:
+        if rig is not None:
+            rig.close()
         print(f"Could not start Art-Net output: {exc}")
-        print("Make sure Windows is connected to the PKNIGHT Wi-Fi.")
+        print("Check the rig configuration and network connection.")
         return
 
-    fixture = config["fixture"]
+    # Show connection settings before accepting commands
+    fixture = controller.config["fixture"]
 
     print()
-    print(f"{fixture['model']} controller ({fixture['mode']})")
+    print(f"{fixture['name']} controller ({fixture['mode']})")
     print("-" * 36)
-    print(f"Config   : {args.config}")
+    print(f"Rig      : {args.rig}")
+    print(f"Fixture  : {fixture_name}")
+    if args.config:
+        print(f"Config   : {args.config}")
     print(f"Local IP : {controller.local_ip}")
     print(f"Target   : {controller.target}:{controller.port}")
     print(f"Universe : {controller.universe}")
@@ -355,6 +351,7 @@ def main():
     print("Type 'help' for commands.")
     print()
 
+    # Dispatch commands to the config-driven controller
     try:
         while True:
             try:
@@ -450,5 +447,6 @@ def main():
     print("Stopped.")
 
 
+# Run only when invoked as a module
 if __name__ == "__main__":
     main()
