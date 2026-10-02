@@ -1,0 +1,367 @@
+# shows/halloween.yaml
+
+seed: 42
+
+fixtures:
+  - zq06141_1
+
+
+phases:
+
+  # Guests arriving
+  - name: arrival
+    duration: 60m
+
+    colour:
+      change_every: 8m
+      choices:
+        - effect: palette_fade
+          palette: halloween_dark
+          period: 40s
+
+        - effect: palette_fade
+          palette: halloween_spooky
+          period: 50s
+
+        - effect: static_colour
+          colour: purple
+
+        - effect: static_colour
+          colour: orange
+
+    movement:
+      change_every: 10m
+      choices:
+        - effect: static_position
+          position: centre
+          motor_speed: 160
+
+        - effect: sweep
+          start: centre_left
+          end: centre_right
+          period: 30s
+          motor_speed: 160
+
+    intensity:
+      change_every: 10m
+      choices:
+        - effect: static_intensity
+          value: 0.65
+
+        - effect: pulse
+          minimum: 0.45
+          maximum: 0.75
+          period: 12s
+
+    strobe:
+      effect: random_strobe_burst
+      chance_per_minute: 0.02
+      duration: 2s
+      value: 96
+
+
+  # Energy starts building
+  - name: build
+    duration: 60m
+
+    colour:
+      change_every: 6m
+      choices:
+        - effect: palette_fade
+          palette: halloween_dark
+          period: 25s
+
+        - effect: palette_fade
+          palette: halloween_pumpkin
+          period: 20s
+
+        - effect: palette_fade
+          palette: halloween_spooky
+          period: 30s
+
+        - effect: rainbow
+          period: 60s
+
+    movement:
+      change_every: 7m
+      choices:
+        - effect: sweep
+          start: left
+          end: right
+          period: 24s
+          motor_speed: 144
+
+        - effect: sweep
+          start: centre_left
+          end: centre_right
+          period: 16s
+          motor_speed: 128
+
+        - effect: position_sequence
+          positions: [left, centre, right, centre]
+          interval: 5s
+          motor_speed: 144
+
+    intensity:
+      change_every: 8m
+      choices:
+        - effect: static_intensity
+          value: 0.75
+
+        - effect: pulse
+          minimum: 0.55
+          maximum: 0.9
+          period: 8s
+
+    strobe:
+      effect: random_strobe_burst
+      chance_per_minute: 0.05
+      duration: 2s
+      value: 112
+
+
+  # More colourful party lighting
+  - name: colourful
+    duration: 60m
+
+    colour:
+      change_every: 5m
+      choices:
+        - effect: palette_fade
+          palette: neon
+          period: 18s
+
+        - effect: palette_fade
+          palette: halloween_spooky
+          period: 20s
+
+        - effect: palette_fade
+          palette: halloween_pumpkin
+          period: 16s
+
+        - effect: rainbow
+          period: 35s
+
+        - effect: random_colour
+          palette: mixed_party
+          interval: 8s
+
+    movement:
+      change_every: 6m
+      choices:
+        - effect: sweep
+          start: left
+          end: right
+          period: 18s
+          motor_speed: 128
+
+        - effect: position_sequence
+          positions: [left, centre_left, centre, centre_right, right]
+          interval: 4s
+          motor_speed: 128
+
+        - effect: random_position
+          positions: [left, centre_left, centre, centre_right, right]
+          interval: 6s
+          motor_speed: 128
+
+    intensity:
+      change_every: 7m
+      choices:
+        - effect: static_intensity
+          value: 0.85
+
+        - effect: pulse
+          minimum: 0.65
+          maximum: 1.0
+          period: 6s
+
+    strobe:
+      effect: random_strobe_burst
+      chance_per_minute: 0.08
+      duration: 2.5s
+      value: 128
+
+
+  # First peak
+  - name: peak_1
+    duration: 60m
+
+    colour:
+      change_every: 4m
+      choices:
+        - effect: rainbow
+          period: 20s
+
+        - effect: palette_fade
+          palette: neon
+          period: 12s
+
+        - effect: palette_fade
+          palette: halloween_dark
+          period: 14s
+
+        - effect: random_colour
+          palette: mixed_party
+          interval: 5s
+
+    movement:
+      change_every: 5m
+      choices:
+        - effect: sweep
+          start: left
+          end: right
+          period: 12s
+          motor_speed: 112
+
+        - effect: position_sequence
+          positions: [left, centre, right, centre]
+          interval: 3s
+          motor_speed: 112
+
+        - effect: random_position
+          positions: [left, centre_left, centre, centre_right, right]
+          interval: 4s
+          motor_speed: 112
+
+    intensity:
+      change_every: 6m
+      choices:
+        - effect: static_intensity
+          value: 1.0
+
+        - effect: pulse
+          minimum: 0.7
+          maximum: 1.0
+          period: 4s
+
+    strobe:
+      effect: random_strobe_burst
+      chance_per_minute: 0.14
+      duration: 3s
+      value: 144
+
+
+  # Highest-energy section
+  - name: peak_2
+    duration: 60m
+
+    colour:
+      change_every: 3m
+      choices:
+        - effect: rainbow
+          period: 12s
+
+        - effect: palette_fade
+          palette: neon
+          period: 10s
+
+        - effect: palette_fade
+          palette: halloween_pumpkin
+          period: 10s
+
+        - effect: palette_fade
+          palette: halloween_spooky
+          period: 12s
+
+        - effect: random_colour
+          palette: mixed_party
+          interval: 3s
+
+    movement:
+      change_every: 4m
+      choices:
+        - effect: sweep
+          start: left
+          end: right
+          period: 10s
+          motor_speed: 96
+
+        - effect: position_sequence
+          positions: [left, right, centre_left, centre_right, centre]
+          interval: 2.5s
+          motor_speed: 96
+
+        - effect: random_position
+          positions: [left, centre_left, centre, centre_right, right]
+          interval: 3s
+          motor_speed: 96
+
+    intensity:
+      change_every: 5m
+      choices:
+        - effect: static_intensity
+          value: 1.0
+
+        - effect: pulse
+          minimum: 0.75
+          maximum: 1.0
+          period: 3s
+
+    strobe:
+      effect: random_strobe_burst
+      chance_per_minute: 0.2
+      duration: 3s
+      value: 160
+
+
+  # Slower late-night lighting
+  - name: late
+    duration: 60m
+
+    colour:
+      change_every: 7m
+      choices:
+        - effect: palette_fade
+          palette: halloween_dark
+          period: 30s
+
+        - effect: palette_fade
+          palette: halloween_spooky
+          period: 35s
+
+        - effect: palette_fade
+          palette: ultraviolet
+          period: 30s
+
+        - effect: static_colour
+          colour: purple
+
+        - effect: static_colour
+          colour: red
+
+    movement:
+      change_every: 8m
+      choices:
+        - effect: sweep
+          start: left
+          end: right
+          period: 28s
+          motor_speed: 160
+
+        - effect: sweep
+          start: centre_left
+          end: centre_right
+          period: 20s
+          motor_speed: 160
+
+        - effect: static_position
+          position: centre
+          motor_speed: 160
+
+    intensity:
+      change_every: 8m
+      choices:
+        - effect: static_intensity
+          value: 0.65
+
+        - effect: pulse
+          minimum: 0.4
+          maximum: 0.75
+          period: 10s
+
+    strobe:
+      effect: random_strobe_burst
+      chance_per_minute: 0.03
+      duration: 2s
+      value: 96
