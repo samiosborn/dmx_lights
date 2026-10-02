@@ -1,0 +1,75 @@
+# config/palettes.yaml
+
+# Reusable colour palettes
+
+palettes:
+
+  ultraviolet:
+    - blue
+    - indigo
+    - purple
+    - magenta
+
+  sunset:
+    - red
+    - orange
+    - amber
+    - yellow
+    - pink
+
+  ocean:
+    - blue
+    - cyan
+    - teal
+
+  neon:
+    - magenta
+    - cyan
+    - lime
+    - purple
+
+  warm:
+    - red
+    - orange
+    - amber
+    - yellow
+
+  cool:
+    - teal
+    - cyan
+    - blue
+    - indigo
+    - purple
+
+  primary:
+    - red
+    - green
+    - blue
+
+  mixed_party:
+    - red
+    - orange
+    - yellow
+    - green
+    - cyan
+    - blue
+    - purple
+    - magenta
+
+  halloween_pumpkin:
+    - orange
+    - amber
+    - red
+    - yellow
+
+  halloween_dark:
+    - orange
+    - red
+    - purple
+    - indigo
+
+  halloween_spooky:
+    - purple
+    - indigo
+    - blue
+    - orange

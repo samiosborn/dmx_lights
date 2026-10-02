@@ -1,0 +1,96 @@
+# config/colours.yaml
+
+# Named RGBW colours
+# Values are normalised floats from 0.0 to 1.0 so effects can interpolate cleanly
+
+colours:
+
+  red:
+    r: 1.0
+    g: 0.0
+    b: 0.0
+    w: 0.0
+
+  orange:
+    r: 1.0
+    g: 0.27
+    b: 0.0
+    w: 0.0
+
+  amber:
+    r: 1.0
+    g: 0.47
+    b: 0.0
+    w: 0.0
+
+  yellow:
+    r: 1.0
+    g: 0.86
+    b: 0.0
+    w: 0.0
+
+  lime:
+    r: 0.47
+    g: 1.0
+    b: 0.0
+    w: 0.0
+
+  green:
+    r: 0.0
+    g: 1.0
+    b: 0.0
+    w: 0.0
+
+  teal:
+    r: 0.0
+    g: 1.0
+    b: 0.47
+    w: 0.0
+
+  cyan:
+    r: 0.0
+    g: 1.0
+    b: 1.0
+    w: 0.0
+
+  blue:
+    r: 0.0
+    g: 0.0
+    b: 1.0
+    w: 0.0
+
+  indigo:
+    r: 0.27
+    g: 0.0
+    b: 1.0
+    w: 0.0
+
+  purple:
+    r: 0.67
+    g: 0.0
+    b: 1.0
+    w: 0.0
+
+  magenta:
+    r: 1.0
+    g: 0.0
+    b: 0.78
+    w: 0.0
+
+  pink:
+    r: 1.0
+    g: 0.16
+    b: 0.47
+    w: 0.0
+
+  white:
+    r: 0.0
+    g: 0.0
+    b: 0.0
+    w: 1.0
+
+  warm_white:
+    r: 0.39
+    g: 0.14
+    b: 0.0
+    w: 0.75
